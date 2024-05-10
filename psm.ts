@@ -1,12 +1,16 @@
-import * as fs from "fs";
+import fs from "fs";
 import { parse } from "csv-parse";
+
+// ---------- インプットを確認 ----------
 
 if (process.argv.length !== 3 || !fs.existsSync(process.argv[2])) {
     console.log("使い方: ts-node psm.ts <filename.csv>");
     process.exit(1);
 }
 
-const filename = process.argv[2];
+const fileName = process.argv[2];
+
+// ---------- 最終的なデータ処理と結果の出力 ----------
 
 function processData(data: { [key: string]: number[] }) {
     const step = 50
@@ -17,16 +21,18 @@ function processData(data: { [key: string]: number[] }) {
         '最高価格': findIntersectionPrice(min_price, max_price, step, data["高すぎる"], data["安い"]),
         '妥協価格': findIntersectionPrice(min_price, max_price, step, data["高い"], data["安い"]),
         '理想価格': findIntersectionPrice(min_price, max_price, step, data["高すぎる"], data["安すぎる"]),
-        '最低品質保証価格': findIntersectionPrice(min_price, max_price, step, data["高い"], data["安すぎる"])
+        '最低品質保証価格': findIntersectionPrice(min_price, max_price, step, data["高い"], data["安すぎる"]),
     };
 
-    for (const key of Object.keys(final_prices)) {
+    for (let key in final_prices) {
         console.log(`${key}：${final_prices[key]}円`);
     }
 }
 
+// ---------- CSVファイルのデータ処理 ----------
+
 const columns: string[][] = [];
-fs.createReadStream(filename, { encoding: 'utf-8' })
+fs.createReadStream(fileName, { encoding: 'utf-8' })
     .pipe(parse())
     .on('data', (row: any) => {
         const columnNames = Object.keys(row);
@@ -50,13 +56,18 @@ fs.createReadStream(filename, { encoding: 'utf-8' })
         processData(data);
     });
 
+// ---------- 補助の関数 ---------- 
+
+// サンプルから最小値を見つけて、集計単位から処理に使う最小値を出す
 function findMinPrice(data: { [key: string]: number[] }, step: number): number {
-    const minPriceSample = Math.min(...Object.values(data).flatMap(values => values));
+    const minPriceSample = Math.min(...Object.values(data).flat());
+
     return Math.floor(minPriceSample / step) * step;
 }
 
+// サンプルから最大値を見つけて、集計単位から処理に使う最大値を出す
 function findMaxPrice(data: { [key: string]: number[] }, step: number): number {
-    const maxPriceSample = Math.max(...Object.values(data).flatMap(values => values));
+    const maxPriceSample = Math.max(...Object.values(data).flat());
 
     if (maxPriceSample % step === 0) {
         return (Math.floor(maxPriceSample / step) + 1) * step;
@@ -65,10 +76,11 @@ function findMaxPrice(data: { [key: string]: number[] }, step: number): number {
     }
 }
 
+// どの価格で何パーセントの回答者が「高い」「安い」「高すぎる」「安すぎる」と考えたかのデータを集計する
 function findPercentage(price: number, sampleData: number[], isExpensive: boolean): number {
-    let counter: number = 0;
+    let counter = 0;
 
-    for (const value of sampleData) {
+    for (let value of sampleData) {
         if (isExpensive) {
             if (value <= price) {
                 counter++;
@@ -80,20 +92,21 @@ function findPercentage(price: number, sampleData: number[], isExpensive: boolea
         }
     }
 
-    const percentage: number = (counter / sampleData.length) * 100;
+    const percentage = (counter / sampleData.length) * 100;
     return Math.round(percentage * 10) / 10;
 }
 
+// ４つの価格を集計するための直線のX座標の出力
 function findLineRange(min: number, max: number, step: number, expensiveData: number[], cheapData: number[]): number[] {
-    const priceSearchList: number[] = Array.from({ length: Math.floor((max - min) / step) + 1 }, (_, i) => min + i * step);
+    const priceSearchList = Array.from({ length: Math.floor((max - min) / step) + 1 }, (_, i) => min + i * step);
 
     if (priceSearchList.length === 2) {
         return priceSearchList;
     }
 
-    const middleValue: number = priceSearchList[Math.floor(priceSearchList.length / 2)];
-    const expensivePercentage: number = findPercentage(middleValue, expensiveData, true);
-    const cheapPercentage: number = findPercentage(middleValue, cheapData, false);
+    const middleValue = priceSearchList[Math.floor(priceSearchList.length / 2)];
+    const expensivePercentage = findPercentage(middleValue, expensiveData, true);
+    const cheapPercentage = findPercentage(middleValue, cheapData, false);
 
     if (expensivePercentage > cheapPercentage) {
         return findLineRange(min, middleValue, step, expensiveData, cheapData);
@@ -102,23 +115,25 @@ function findLineRange(min: number, max: number, step: number, expensiveData: nu
     }
 }
 
+// ある２つの直線の交点のX座標を求める
 function findXIntersect(line1: [number, number][], line2: [number, number][]): number {
     const [x1, y1] = line1[0];
     const [x2, y2] = line1[1];
     const [x3, y3] = line2[0];
     const [x4, y4] = line2[1];
 
-    const m1: number = (y2 - y1) / (x2 - x1);
-    const m2: number = (y4 - y3) / (x4 - x3);
+    const m1 = (y2 - y1) / (x2 - x1);
+    const m2 = (y4 - y3) / (x4 - x3);
 
-    const b1: number = y1 - m1 * x1;
-    const b2: number = y3 - m2 * x3;
+    const b1 = y1 - m1 * x1;
+    const b2 = y3 - m2 * x3;
 
-    const xIntersect: number = (b2 - b1) / (m1 - m2);
+    const xIntersect = (b2 - b1) / (m1 - m2);
 
     return xIntersect;
 }
 
+// ２つの直線を設定して交点の価格を求める
 function findIntersectionPrice(minPrice: number, maxPrice: number, step: number, expensiveData: number[], cheapData: number[]): number {
     const [min, max]: number[] = findLineRange(minPrice, maxPrice, step, expensiveData, cheapData);
 
@@ -132,9 +147,7 @@ function findIntersectionPrice(minPrice: number, maxPrice: number, step: number,
         [max, findPercentage(max, cheapData, false)]
     ];
 
-    const xIntersect: number = findXIntersect(expensiveLine, cheapLine);
+    const xIntersect = findXIntersect(expensiveLine, cheapLine);
 
     return Math.round(xIntersect);
 }
-
-
