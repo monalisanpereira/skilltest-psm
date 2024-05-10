@@ -4,7 +4,7 @@ import { parse } from "csv-parse";
 // ---------- インプットを確認 ----------
 
 if (process.argv.length !== 3 || !fs.existsSync(process.argv[2])) {
-    console.log("使い方: ts-node psm.ts <filename.csv>");
+    console.log("コマンド実行の方法: ts-node psm.ts <filename.csv>");
     process.exit(1);
 }
 
